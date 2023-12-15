@@ -222,6 +222,7 @@ class AccumulatingCache(ReadCache):
                 if self[key].number == value.number:
                     # Same read, update raw_data
                     self[key].raw_data += value.raw_data
+                    self[key].chunk_classifications.extend(value.chunk_classifications)
                     self.replaced += 1
                 else:
                     # New read

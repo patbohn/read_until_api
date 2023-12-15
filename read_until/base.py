@@ -346,11 +346,19 @@ class ReadUntilClient(object):
         data = self.data_queue.popitems(items=batch_size, last=last)
 
         if not self.one_chunk:
-            data = [
-                (channel, read)
-                for (channel, read) in data
-                if read.number > self.channel_read_latest_decision[channel]
-            ]
+            if self.filter_strands:
+                data = [
+                    (channel, read)
+                    for (channel, read) in data
+                    if (read.number > self.channel_read_latest_decision[channel]) 
+                    and any([classif in self.strand_classes for classif in read.chunk_classifications])
+                ]
+            else:
+                data = [
+                    (channel, read)
+                    for (channel, read) in data
+                    if read.number > self.channel_read_latest_decision[channel]
+                ]
         return data
 
     def unblock_read_batch(self, reads, duration=0.1):
@@ -580,14 +588,7 @@ class ReadUntilClient(object):
                 samples_behind += read_samples_behind
                 raw_data_bytes += len(read.raw_data)
 
-                if self.filter_strands:
-                    strand_like = any(
-                        [x in self.strand_classes for x in read.chunk_classifications]
-                    )
-                    if strand_like:
-                        self.data_queue[read_channel] = read
-                else:
-                    self.data_queue[read_channel] = read
+                self.data_queue[read_channel] = read
 
             now = time.time()
             log_interval_secs = 60 * 15  # 15 mins
