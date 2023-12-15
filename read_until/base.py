@@ -293,6 +293,11 @@ class ReadUntilClient(object):
         return self.connection.acquisition.get_progress().raw_per_channel
 
     @property
+    def cache_type(self):
+        """"Type of Cache to store incoming data in"""
+        return self.CacheType
+    
+    @property
     def queue_length(self):
         """The length of the read queue."""
         return len(self.data_queue)
