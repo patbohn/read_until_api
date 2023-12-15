@@ -120,6 +120,7 @@ class ReadUntilClient(object):
         mk_host: str = "127.0.0.1",
         mk_port: int = 8000,
         cache_type: ReadCache = ReadCache,
+        cache_buffer: int = 100,
         filter_strands: bool = True,
         one_chunk: bool = True,
         prefilter_classes: Set[str,] = None,
@@ -136,6 +137,7 @@ class ReadUntilClient(object):
         self.filter_strands = filter_strands
         self.one_chunk = one_chunk
         self.prefilter_classes = prefilter_classes
+        self.cache_buffer = cache_buffer
 
         # Stores the most recent read number that a decision has been made on (stop_receiving/unblock)
         self.channel_read_latest_decision = defaultdict(int)
@@ -158,7 +160,7 @@ class ReadUntilClient(object):
         self.channel_count = self.connection.device.get_flow_cell_info().channel_count
 
         # Set cache_size and last_channel to the same as the device channel count
-        self.cache_size = self.channel_count
+        self.cache_size = self.channel_count + self.cache_buffer
         self.last_channel = self.channel_count
 
         # Get read classifications
