@@ -126,6 +126,7 @@ class ReadUntilClient(object):
         prefilter_classes: Set[str,] = None,
         calibrated_signal: bool = False,
         mk_credentials: grpc.ChannelCredentials = None,
+        wait_between_grpc: float = 0.0001
     ):
         self.logger = logging.getLogger("ReadUntil")
 
@@ -138,6 +139,7 @@ class ReadUntilClient(object):
         self.one_chunk = one_chunk
         self.prefilter_classes = prefilter_classes
         self.cache_buffer = cache_buffer
+        self.wait_between_requests = wait_between_grpc
 
         # Stores the most recent read number that a decision has been made on (stop_receiving/unblock)
         self.channel_read_latest_decision = defaultdict(int)
@@ -605,6 +607,7 @@ class ReadUntilClient(object):
                 samples_behind = 0
                 raw_data_bytes = 0
                 last_msg_time = now
+            time.sleep(self.wait_between_requests)
 
     def _generate_action(self, read_channel, read_number, action, **params):
         """Returns an action request to be placed on the queue
