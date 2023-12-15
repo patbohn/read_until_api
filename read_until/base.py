@@ -201,12 +201,12 @@ class ReadUntilClient(object):
             self.CacheType.__name__,
             filter_to,
         )
-
-        self.strand_classes = set(
-            self.lookup_read_class[x] for x in self.prefilter_classes
-        )
-
-        self.logger.debug("Strand-like classes are %s.", self.strand_classes)
+        if self.filter_strands:
+            self.strand_classes = set(
+                self.lookup_read_class[x] for x in self.prefilter_classes
+            )
+    
+            self.logger.debug("Strand-like classes are %s.", self.strand_classes)
 
         if calibrated_signal:
             self.calibration = data_pb2.GetLiveReadsRequest.CALIBRATED
@@ -580,10 +580,13 @@ class ReadUntilClient(object):
                 samples_behind += read_samples_behind
                 raw_data_bytes += len(read.raw_data)
 
-                strand_like = any(
-                    [x in self.strand_classes for x in read.chunk_classifications]
-                )
-                if not self.filter_strands or strand_like:
+                if self.filter_strands:
+                    strand_like = any(
+                        [x in self.strand_classes for x in read.chunk_classifications]
+                    )
+                    if strand_like:
+                        self.data_queue[read_channel] = read
+                else:
                     self.data_queue[read_channel] = read
 
             now = time.time()
