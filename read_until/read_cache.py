@@ -182,7 +182,7 @@ class AccumulatingCache(ReadCache):
         """Delegate with lock."""
         with self.lock:
             del self._keys[key]
-            self._dict[key].clear()
+            del self._dict[key]
 
     def __len__(self):
         """Delegate with lock."""
@@ -192,7 +192,7 @@ class AccumulatingCache(ReadCache):
     def __iter__(self):
         """Delegate with lock."""
         with self.lock:
-            yield from self._dict.__iter__()
+            yield from self._keys.__iter__()
 
     def keys(self):
         """Delegate with lock."""
@@ -214,25 +214,28 @@ class AccumulatingCache(ReadCache):
             the `raw_data` is accumulated, not replaced.
         """
         with self.lock:
-            if key not in self:
+            if key not in self._dict:
                 # Key not in _dict
                 self._dict[key] = value
             else:
                 # Key exists
-                if self[key].number == value.number:
+                if self._dict[key].number == value.number:
                     # Same read, update raw_data
                     if len(self._dict[key].raw_data) < self._max_raw_signal:
+                        self._dict[key].raw_data += value.raw_data
+                        self._dict[key].chunk_classifications.extend(value.chunk_classifications)
                     self.replaced += 1
                 else:
                     # New read
+                    del self._dict[key]
                     self._dict[key] = value
                     self.missed += 1
 
             # Mark this channel as updated
             self._keys[key] = True
 
-            if len(self) > self.size:
-                self.popitem(last=False)
+            while len(self._dict) > self.size:
+                _, _ = self._dict.popitem(last=False)
 
     def popitem(self, last=True):
         """Remove and return a (key, value) pair from the cache
