@@ -223,6 +223,7 @@ class AccumulatingCache(ReadCache):
                     # Same read, update raw_data
                     if len(self._dict[key].raw_data) < self._max_raw_signal:
                         self._dict[key].raw_data += value.raw_data
+                        self._dict[key].chunk_length += value.chunk_length
                         self._dict[key].chunk_classifications.extend(value.chunk_classifications)
                     self.replaced += 1
                 else:
