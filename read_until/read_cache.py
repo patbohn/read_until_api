@@ -4,7 +4,6 @@ from collections import OrderedDict
 from collections.abc import MutableMapping
 from threading import RLock
 
-
 class ReadCache(MutableMapping):
     """A thread-safe dict-like container with a maximum size
 
@@ -182,7 +181,7 @@ class AccumulatingCache(ReadCache):
         """Delegate with lock."""
         with self.lock:
             del self._keys[key]
-            del self._dict[key]
+            self._dict[key].clear()
 
     def __len__(self):
         """Delegate with lock."""
@@ -192,7 +191,7 @@ class AccumulatingCache(ReadCache):
     def __iter__(self):
         """Delegate with lock."""
         with self.lock:
-            yield from self._keys.__iter__()
+            yield from self._dict.__iter__()
 
     def keys(self):
         """Delegate with lock."""
@@ -273,6 +272,203 @@ class AccumulatingCache(ReadCache):
 
             while self._keys and len(data) != items:
                 ch, _ = self._keys.popitem(last=last)
+                data.append((ch, self._dict[ch]))
+
+            return data
+
+
+class ChannelCache() :
+    def __init__(self, max_signals):
+        self._max_bytes = max_signals * 4 #f32 -> 4 bytes per sample
+        self._raw_data = bytearray(self._max_bytes) 
+        self._raw_pointer = 0
+        self._total_raw_data = 0
+        self._full = False
+        self.chunk_classifications = []
+        self.num_chunks = 0
+        self.number = -1
+        self.id = ""
+        self.start_sample = -1
+        self.chunk_start_sample = -1
+    
+    @property
+    def raw_data(self):
+        return self._raw_data[:self._raw_pointer]
+    
+    @property
+    def chunk_length(self):
+        return int(self._total_raw_data / 4)
+    
+    def update(self, read_object):
+        new_chunk = read_object.raw_data
+        new_chunk_length = len(new_chunk)
+
+        # check if it is still the same read
+        if self.number == read_object.number:
+            #check that we weren't full last time:
+            if not self._full:
+                #check if we would be over capacity
+                updated_pointer = self._raw_pointer + new_chunk_length
+                if updated_pointer > self._max_bytes:
+                    #here we need to trim raw signal when updating
+                    self._raw_data[self._raw_pointer:self._max_bytes] = new_chunk[:self._max_bytes - updated_pointer]
+                    self._full = True
+                else:
+                    self._raw_data[self._raw_pointer:updated_pointer] = new_chunk
+                    self._raw_pointer = updated_pointer
+
+            self._total_raw_data += new_chunk_length
+            self.num_chunks += 1
+
+            self.chunk_classifications += list(read_object.chunk_classifications)
+
+            return 0
+        
+        # if this is a new read number we clear some values
+        else:
+            self.id = read_object.id
+            self.number = read_object.number
+            self.start_sample = read_object.start_sample
+            self.chunk_start_sample = read_object.chunk_start_sample
+            self._total_raw_data = new_chunk_length
+            self.num_chunks = 1
+            
+            if new_chunk_length > self._max_bytes:
+                self._full = True
+                self._raw_pointer = self._max_bytes
+                self._raw_data[:self._raw_pointer] = new_chunk[:self._max_bytes]
+            else:
+                self._full = False
+                self._raw_pointer = new_chunk_length
+                self._raw_data[:self._raw_pointer] = new_chunk
+            
+            self.chunk_classifications = list(read_object.chunk_classifications)
+
+            return 1
+    
+    def clear(self):
+        self._raw_pointer = 0
+        self._total_raw_data = 0
+        self._full = False
+        self.num_chunks = 0
+        self.number = -1
+        self.chunk_classifications = []
+
+class PreallocAccumulatingCache(ReadCache):
+    """A thread-safe dict-like container with a maximum size and
+    fixed max data stored per channel. Memory stays allocated 
+    between reads, which may reduce computational requirements. 
+    Each channel has a ChannelCache object that gets updated when 
+    a new chunk arrives. 
+
+    Implemented with help from the AccumulatingCache above. 
+
+    .. warning::
+        For compatibility with the ReadUntilClient, the attributes
+        `missed` and `replaced` are used here. However, `replaced`
+        is incremented whenever a new chunk is appended to a read
+        currently in the cache. `missed` is incremented whenever a
+        read is replaced with a new read, not seen in the cache.
+    """
+
+    def __init__(self, channel_start, channel_end, max_signals, *args, **kwargs):
+        # ``self._updated_channels`` is an lookup dictionary. It is used to track channels
+        #   that have been updated.
+        self._updated_channels = OrderedDict()
+
+        self._max_signals = max_signals
+        self._channel_start = channel_start
+        self._num_channels = channel_end - channel_start + 1
+
+        super().__init__(size = self._num_channels, *args, **kwargs)
+
+        for channel in range(channel_start, channel_end + 1):
+            self._dict[channel] = ChannelCache(self._max_signals)
+    
+    def __delitem__(self, channel):
+        """Delegate with lock."""
+        with self.lock:
+            del self._updated_channels[channel]
+            self._dict[channel].clear()
+
+    def __len__(self):
+        """Delegate with lock."""
+        with self.lock:
+            return len(self._updated_channels)
+
+    def __iter__(self):
+        """Delegate with lock."""
+        with self.lock:
+            yield from self._dict.__iter__()
+
+    def keys(self):
+        """Delegate with lock."""
+        with self.lock:
+            return self._dict.keys()
+
+    def __setitem__(self, channel, chunk_data):
+        """Cache that accumulates read chunks as they are received
+
+        :param key: Channel number for the read chunk
+        :type key: int
+        :param value: Live read data object from MinKNOW rpc. Requires
+            attributes `number` and `raw_data`.
+        :type value: minknow_api.data_pb2.GetLiveReadsResponse.ReadData
+
+        :returns: None
+
+        .. notes:: In this implementation attribute `replaced` counts reads where
+            the `raw_data` is accumulated, not replaced.
+        """
+        if channel in self._dict:
+            # channel in _dict -> channel is part of range
+            with self.lock:
+                update = self._dict[channel].update(chunk_data)
+                if update:
+                    self.missed += 1
+                else:
+                    self.replaced += 1
+                # Mark this channel as updated
+                self._updated_channels[channel] = True
+
+    def popitem(self, last=True):
+        """Remove and return a (key, value) pair from the cache
+
+        :param last: If True remove in LIFO order, if False remove in FIFO order
+        :type last: bool
+
+        :returns: key, value pair of (channel, ChannelCache)
+        :rtype: tuple
+        """
+        ch, _ = self._updated_channels.popitem(last=last)
+        return ch, self._dict[ch]
+
+    def popitems(self, items=1, last=True):
+        """Return a list of popped items from the cache.
+
+        :param items: Maximum number of items to return
+        :type items: int
+        :param last: If True, return the newest entry (LIFO); else the oldest (FIFO).
+        :type last: bool
+
+        :returns: Output list of upto `items` (key, value) pairs from the cache
+        :rtype: list
+        """
+        if items > self.size:
+            items = self.size
+
+        with self.lock:
+            data = []
+            if items >= len(self._updated_channels):
+                if last:
+                    data = [(ch, self._dict[ch]) for ch in reversed(self._updated_channels.keys())]
+                else:
+                    data = [(ch, self._dict[ch]) for ch in self._ke_updated_channelsys.keys()]
+                self._updated_channels.clear()
+                return data
+
+            while self._updated_channels and len(data) != items:
+                ch, _ = self._updated_channels.popitem(last=last)
                 data.append((ch, self._dict[ch]))
 
             return data

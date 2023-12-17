@@ -120,7 +120,9 @@ class ReadUntilClient(object):
         mk_host: str = "127.0.0.1",
         mk_port: int = 8000,
         cache_type: ReadCache = ReadCache,
-        cache_buffer: int = 100,
+        max_raw_signal: int = 30000,
+        first_channel: int = 1,
+        last_channel: int = 512,
         filter_strands: bool = True,
         one_chunk: bool = True,
         prefilter_classes: Set[str,] = None,
@@ -138,8 +140,13 @@ class ReadUntilClient(object):
         self.filter_strands = filter_strands
         self.one_chunk = one_chunk
         self.prefilter_classes = prefilter_classes
-        self.cache_buffer = cache_buffer
+
         self.wait_between_requests = wait_between_grpc
+
+        # specific to prealloc
+        self.max_raw_signal = max_raw_signal
+        self.first_channel = first_channel
+        self.last_channel = last_channel
 
         # Stores the most recent read number that a decision has been made on (stop_receiving/unblock)
         self.channel_read_latest_decision = defaultdict(int)
@@ -158,12 +165,12 @@ class ReadUntilClient(object):
             raise
         self.logger.info("Got rpc connection.")
 
-        self.first_channel = 1
-        self.channel_count = self.connection.device.get_flow_cell_info().channel_count
-
-        # Set cache_size and last_channel to the same as the device channel count
-        self.cache_size = self.channel_count + self.cache_buffer
-        self.last_channel = self.channel_count
+        if self.CacheType.__name__ == "PreallocAccumulatingCache":
+            self.cache_size = self.last_channel - self.first_channel + 1
+        else:
+            self.first_channel = 1
+            self.last_channel = self.connection.device.get_flow_cell_info().channel_count
+            self.cache_size = self.last_channel
 
         # Get read classifications
         read_classifiers = (
@@ -277,7 +284,10 @@ class ReadUntilClient(object):
         self.channel_read_latest_decision = defaultdict(int)
 
         # the data_queue is used to store the latest chunk per channel
-        self.data_queue = self.CacheType(size=self.cache_size)
+        if self.CacheType.__name__ == "PreallocAccumulatingCache":
+            self.data_queue = self.CacheType(self.first_channel, self.last_channel, self.max_raw_signal)
+        else:
+            self.data_queue = self.CacheType(self.cache_size)
         # stores all sent action ids -> unblock/stop
         self.sent_actions = dict()
 
@@ -344,7 +354,8 @@ class ReadUntilClient(object):
             oldest entries (FIFO).
         :type last: bool
 
-        :returns: list of tuples: (channel, ReadData)
+        :returns: list of tuples:  (channel, ReadData) 
+                                or (channel, ChannelCache) with PreallocAccumulatingCache
         :rtype: list
 
         """
