@@ -175,7 +175,7 @@ class AccumulatingCache(ReadCache):
         # ``self._keys`` is an lookup dictionary. It is used to track reads
         #   that have been updated.
         self._keys = OrderedDict()
-        self._max_raw_signal = max_raw_signal
+        self._max_raw_signal = max_raw_signal * 4 # each signal has 4 bytes
         super().__init__(*args, **kwargs)
 
     def __delitem__(self, key):
