@@ -287,7 +287,7 @@ class ReadUntilClient(object):
         if self.CacheType.__name__ == "PreallocAccumulatingCache":
             self.data_queue = self.CacheType(self.first_channel, self.last_channel, self.max_raw_signal)
         else:
-            self.data_queue = self.CacheType(self.cache_size)
+            self.data_queue = self.CacheType(max_raw_signal = self.max_raw_signal, size = self.cache_size)
         # stores all sent action ids -> unblock/stop
         self.sent_actions = dict()
 

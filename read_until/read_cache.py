@@ -171,10 +171,11 @@ class AccumulatingCache(ReadCache):
         channels on the sequencing device. e.g. 512 on MinION.
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, max_raw_signal, *args, **kwargs):
         # ``self._keys`` is an lookup dictionary. It is used to track reads
         #   that have been updated.
         self._keys = OrderedDict()
+        self._max_raw_signal = max_raw_signal
         super().__init__(*args, **kwargs)
 
     def __delitem__(self, key):
@@ -220,8 +221,7 @@ class AccumulatingCache(ReadCache):
                 # Key exists
                 if self[key].number == value.number:
                     # Same read, update raw_data
-                    self[key].raw_data += value.raw_data
-                    self[key].chunk_classifications.extend(value.chunk_classifications)
+                    if len(self._dict[key].raw_data) < self._max_raw_signal:
                     self.replaced += 1
                 else:
                     # New read
