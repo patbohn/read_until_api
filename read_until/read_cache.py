@@ -463,7 +463,7 @@ class PreallocAccumulatingCache(ReadCache):
                 if last:
                     data = [(ch, self._dict[ch]) for ch in reversed(self._updated_channels.keys())]
                 else:
-                    data = [(ch, self._dict[ch]) for ch in self._ke_updated_channelsys.keys()]
+                    data = [(ch, self._dict[ch]) for ch in self._updated_channels.keys()]
                 self._updated_channels.clear()
                 return data
 
