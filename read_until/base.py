@@ -338,7 +338,7 @@ class ReadUntilClient(object):
         """
         return self.running.is_set()
 
-    def get_read_chunks(self, batch_size=1, last=True):
+    def get_read_chunks(self, batch_size=1, last=True, min_chunk_length = 0):
         """Get read chunks from the ReadCache
 
         This method returns a list of tuples, each tuple consists of
@@ -368,12 +368,14 @@ class ReadUntilClient(object):
                     for (channel, read) in data
                     if (read.number > self.channel_read_latest_decision[channel]) 
                     and any([classif in self.strand_classes for classif in read.chunk_classifications])
+                    and read.chunk_length >= min_chunk_length
                 ]
             else:
                 data = [
                     (channel, read)
                     for (channel, read) in data
                     if read.number > self.channel_read_latest_decision[channel]
+                    and read.chunk_length >= min_chunk_length
                 ]
         return data
 
