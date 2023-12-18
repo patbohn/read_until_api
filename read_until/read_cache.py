@@ -282,7 +282,8 @@ class AccumulatingCache(ReadCache):
 
 
 class ChannelCache() :
-    def __init__(self, max_signals):
+    def __init__(self, max_signals, channel):
+        self.channel = channel
         self._max_bytes = max_signals * 4 #f32 -> 4 bytes per sample
         self._raw_data = bytearray(self._max_bytes) 
         self._raw_pointer = 0
@@ -302,6 +303,7 @@ class ChannelCache() :
     @property
     def chunk_length(self):
         return int(self._total_raw_data / 4)
+    
     
     def update(self, read_object):
         new_chunk = read_object.raw_data
@@ -387,7 +389,7 @@ class PreallocAccumulatingCache(ReadCache):
         super().__init__(size = self._num_channels, *args, **kwargs)
 
         for channel in range(channel_start, channel_end + 1):
-            self._dict[channel] = ChannelCache(self._max_signals)
+            self._dict[channel] = ChannelCache(self._max_signals, channel)
     
     def __delitem__(self, channel):
         """Delegate with lock."""
