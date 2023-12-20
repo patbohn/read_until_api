@@ -366,8 +366,11 @@ class ReadUntilClient(object):
                 data = [
                     (channel, read)
                     for (channel, read) in data
-                    if (read.number > self.channel_read_latest_decision[channel]) 
-                    and any([classif in self.strand_classes for classif in read.chunk_classifications])
+                    # we didnt decide yet on the read:
+                    if (read.number > self.channel_read_latest_decision[channel])
+                    # at least half of the chunks are classified as one of our filters:
+                    and sum([classif in self.strand_classes for classif in read.chunk_classifications]) > len(read.chunk_classifications)/2
+                    # our total chunk length is not below the minimum length:
                     and read.chunk_length >= min_chunk_length
                 ]
             else:
