@@ -143,7 +143,6 @@ class ReadUntilClient(object):
 
         self.wait_between_requests = wait_between_grpc
 
-        # specific to prealloc
         self.max_raw_signal = max_raw_signal
         self.first_channel = first_channel
         self.last_channel = last_channel
@@ -168,8 +167,7 @@ class ReadUntilClient(object):
         if self.CacheType.__name__ == "PreallocAccumulatingCache":
             self.cache_size = self.last_channel - self.first_channel + 1
 
-        self.first_channel = 1
-        self.cache_size = self.last_channel
+        self.cache_size = self.last_channel - self.first_channel
 
         # Get read classifications
         read_classifiers = (
