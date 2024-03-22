@@ -167,10 +167,9 @@ class ReadUntilClient(object):
 
         if self.CacheType.__name__ == "PreallocAccumulatingCache":
             self.cache_size = self.last_channel - self.first_channel + 1
-        else:
-            self.first_channel = 1
-            self.last_channel = self.connection.device.get_flow_cell_info().channel_count
-            self.cache_size = self.last_channel
+
+        self.first_channel = 1
+        self.cache_size = self.last_channel
 
         # Get read classifications
         read_classifiers = (
@@ -369,7 +368,8 @@ class ReadUntilClient(object):
                     # we didnt decide yet on the read:
                     if (read.number > self.channel_read_latest_decision[channel])
                     # at least half of the chunks are classified as one of our filters:
-                    and sum([classif in self.strand_classes for classif in read.chunk_classifications]) > len(read.chunk_classifications)/2
+                    #and sum([classif in self.strand_classes for classif in read.chunk_classifications]) > len(read.chunk_classifications)/2
+                    and any([classif in self.strand_classes for classif in read.chunk_classifications])
                     # our total chunk length is not below the minimum length:
                     and read.chunk_length >= min_chunk_length
                 ]
