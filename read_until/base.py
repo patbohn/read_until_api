@@ -164,10 +164,7 @@ class ReadUntilClient(object):
             raise
         self.logger.info("Got rpc connection.")
 
-        if self.CacheType.__name__ == "PreallocAccumulatingCache":
-            self.cache_size = self.last_channel - self.first_channel + 1
-
-        self.cache_size = self.last_channel - self.first_channel
+        self.cache_size = self.last_channel - self.first_channel + 1
 
         # Get read classifications
         read_classifiers = (
